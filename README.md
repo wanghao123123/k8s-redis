@@ -1,2 +1,88 @@
 # k8s-redis
 redis单机版
+
+
+
+
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: redis-conf
+data:
+  redis.conf: |
+    bind 0.0.0.0
+    port 6379
+    requirepass 1qaz2wsx.
+    pidfile .pid
+    appendonly yes
+    cluster-config-file nodes-6379.conf
+    pidfile /data/k8s/mnt/redis/log/redis-6379.pid
+    cluster-config-file /data/k8s/mnt/redis/conf/redis.conf
+    dir /data/k8s/mnt/redis/data/
+    logfile "/data/k8s/mnt/redis/log/redis-6379.log"
+    cluster-node-timeout 5000
+    protected-mode no
+---
+kind: Service
+apiVersion: v1
+metadata:
+  labels:
+    name: redis
+  name: redis
+spec:
+  type: NodePort
+  ports:
+    - name: redis
+      port: 6379
+      targetPort: 6379
+      nodePort: 30020
+  selector:
+    name: redis
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: redis
+spec:
+  replicas: 1
+  serviceName: redis
+  selector:
+    matchLabels:
+      name: redis
+  template:
+    metadata:
+      labels:
+        name: redis
+    spec:
+      initContainers:
+        - name: init-redis
+          image: busybox
+          command: ['sh', '-c', 'mkdir -p /data/k8s/mnt/redis/log/;mkdir -p /data/k8s/mnt/redis/conf/;mkdir -p /data/k8s/mnt/redis/data/']
+          volumeMounts:
+            - name: data
+              mountPath: /data/k8s/mnt/redis/
+      containers:
+        - name: redis
+          image: redis:5.0.8
+          imagePullPolicy: IfNotPresent
+          command:
+            - sh
+            - -c
+            - "exec redis-server /data/k8s/mnt/redis/conf/redis.conf"
+          ports:
+            - containerPort: 6379
+              name: redis
+              protocol: TCP
+          volumeMounts:
+            - name: redis-config
+              mountPath: /data/k8s/mnt/redis/conf/
+            - name: data
+              mountPath: /data/k8s/mnt/redis/
+      volumes:
+        - name: redis-config
+          configMap:
+            name: redis-conf
+        - name: data
+          hostPath:
+            path: /data/k8s/mnt/redis/

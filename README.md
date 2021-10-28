@@ -1,5 +1,5 @@
 # k8s-redis
-redis单机版
+redis Statefulset 单机版
 
 
 
